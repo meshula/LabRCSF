@@ -1,18 +1,25 @@
 #!/usr/bin/env python3
-"""Stitch skels/*.toml back into a CSV and verify it matches joints.csv.
+"""Stitch skels/*.toml back into joints.csv, in two modes.
 
 Reconstruction order is driven entirely by skels/_canonical.toml (the pivot):
 the ``skeletons`` list gives column order, the ``joints`` list gives row order.
 Each per-skeleton file supplies the cell values.
 
-Verification happens at two levels:
-  1. logical  - parse both CSVs and compare cell-by-cell (did we recover data?)
-  2. byte      - compare raw bytes / md5 (is the round-trip byte-exact?)
+There are two ways to use this, matching the two directions data can flow:
+
+  check (default) - reconstruct from skels/ and confirm it still reproduces
+                    joints.csv, both logically (cell-by-cell) and byte-exact.
+                    Exits non-zero on any drift. Use after a split, or in CI.
+
+  --write (apply) - treat skels/ as the source of truth: regenerate joints.csv
+                    from it, printing a summary of exactly which cells changed
+                    so an edit is self-reviewing. This is the contributor loop:
+                    edit a skels/*.toml, run --write, eyeball the diff, commit.
 
 Usage:
-    python3 join_csv.py                 # verify against joints.csv (no write)
-    python3 join_csv.py -o out.csv      # also write reconstructed CSV to out.csv
-    python3 join_csv.py --write         # overwrite joints.csv (only if verified)
+    python3 join_csv.py                 # check: does skels/ still match joints.csv?
+    python3 join_csv.py --write         # apply: regenerate joints.csv from skels/
+    python3 join_csv.py -o out.csv      # write reconstruction to out.csv (joints.csv untouched)
 """
 
 from __future__ import annotations
@@ -132,17 +139,68 @@ def _report_cell_diffs(original: list[list[str]], rebuilt: list[list[str]]) -> N
                     return
 
 
+def summarize_changes(header: list[str], data: list[list[str]]) -> None:
+    """Print how the reconstruction differs from the current joints.csv.
+
+    Used by --write so an edit is self-reviewing (this is what catches
+    off-by-one / wrong-cell mistakes before they land).
+    """
+    if not os.path.exists(rcsf.CSV_PATH):
+        print(f"{rcsf.CSV_PATH} does not exist yet; creating it.")
+        return
+
+    old = load_original_cells()
+    new = [header] + data
+    old_cols, new_cols = old[0], new[0]
+    added = [c for c in new_cols if c not in old_cols]
+    removed = [c for c in old_cols if c not in new_cols]
+    if added:
+        print(f"  + columns added: {', '.join(added)}")
+    if removed:
+        print(f"  - columns removed: {', '.join(removed)}")
+    if len(old) != len(new):
+        print(f"  rows: {len(old) - 1} -> {len(new) - 1}")
+
+    # Cell-level changes on columns/rows common to both.
+    old_hdr_idx = {c: i for i, c in enumerate(old_cols)}
+    old_rows = {r[0]: r for r in old[1:]}
+    changes = 0
+    for nrow in new[1:]:
+        joint = nrow[0]
+        orow = old_rows.get(joint)
+        if orow is None:
+            print(f"  + row added: {joint}")
+            continue
+        for c, col in enumerate(new_cols):
+            if col not in old_hdr_idx:
+                continue
+            ocell = orow[old_hdr_idx[col]]
+            if nrow[c] != ocell:
+                changes += 1
+                if changes <= 40:
+                    print(f"  [{col}] {joint}: {ocell!r} -> {nrow[c]!r}")
+    if changes > 40:
+        print(f"  ... and {changes - 40} more cell change(s)")
+    total = changes + len(added) + len(removed)
+    print(f"  ({changes} cell change(s)"
+          + (f", {len(added)} column(s) added" if added else "")
+          + (f", {len(removed)} column(s) removed" if removed else "") + ")")
+    if total == 0:
+        print("  (no changes: joints.csv already matches skels/)")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("-o", "--output", metavar="PATH",
-                    help="write reconstructed CSV to PATH")
+                    help="write reconstructed CSV to PATH (leaves joints.csv untouched)")
     ap.add_argument("--write", action="store_true",
-                    help=f"overwrite {rcsf.CSV_PATH} (only if verification passes)")
+                    help=f"apply: regenerate {rcsf.CSV_PATH} from skels/ (the source of truth)")
     args = ap.parse_args()
 
+    # reconstruct() raises on any structural problem (missing joint in a
+    # skeleton file, skeleton-name mismatch, unknown pivot entry).
     header, data = reconstruct()
-    ok = verify(header, data)
 
     if args.output:
         with open(args.output, "wb") as f:
@@ -150,17 +208,20 @@ def main() -> int:
         print(f"Wrote reconstructed CSV to {args.output}")
 
     if args.write:
-        if not ok:
-            print("Refusing to overwrite: verification failed.", file=sys.stderr)
-            return 1
+        print(f"Regenerating {rcsf.CSV_PATH} from skels/ (source of truth):")
+        summarize_changes(header, data)
         with open(rcsf.CSV_PATH, "wb") as f:
             f.write(to_csv_bytes(header, data))
-        print(f"Overwrote {rcsf.CSV_PATH} (verified identical).")
+        print(f"Wrote {rcsf.CSV_PATH} ({len(header)} columns, {len(data)} rows).")
+        return 0
 
+    # check mode: does skels/ still reproduce joints.csv exactly?
+    ok = verify(header, data)
     if ok:
         print("\nRound-trip verified: skels/ fully reproduces joints.csv.")
         return 0
-    print("\nRound-trip FAILED. See differences above.", file=sys.stderr)
+    print("\nMismatch: skels/ and joints.csv differ. "
+          "Run with --write to regenerate joints.csv from skels/.", file=sys.stderr)
     return 1
 
 

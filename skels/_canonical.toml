@@ -19,6 +19,7 @@ skeletons = [
     "SecondLife",
     "Roblox",
     "Momentum",
+    "ANNY",
 ]
 
 # Canonical joints, in CSV row order.

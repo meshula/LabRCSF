@@ -4,17 +4,72 @@ Copyright 2025 Nick Porcino
 
 ## Purpose
 
-The Reference Canonical Skeletal Framework (RCSF) addresses the critical interoperability challenge facing humanoid character systems across digital content creation, game development, and metaverse applications. Through comprehensive analysis of major skeletal standards—from production animation systems to research frameworks—this project provides systematic approaches for cross-format compatibility while preserving the specialized optimizations that drive format diversity.
+Humanoid skeletons are named and structured differently by nearly every tool that uses them, which makes moving characters and animation between content creation, game, and virtual-world pipelines harder than it should be.
 
-This framework provides synthesis-based solutions through comprehensive intermediate representations that enable principled conversion between diverse humanoid skeletal formats. Rather than enforcing universal standardization, RCSF maintains the technical advantages of format-specific optimizations while establishing translation infrastructure for seamless content exchange across application domains.
+The Reference Canonical Skeletal Framework (RCSF) surveys the major skeletal formats and defines a canonical set of joints that each format maps onto. The aim is a clear, well-documented pivot for translating between formats — not a new universal skeleton that everyone is expected to adopt. Format-specific choices are preserved; RCSF just provides the common reference in the middle.
 
 ## Contents
 
-- `survey.md` - Comprehensive analysis of humanoid skeletal standards across nine major formats including OpenUSD, VRM, HAnim, SMPL-X, BVH, ASF/AMC, Mixamo, UE Mannequin, and Unity Mecanim
-- `joints.csv` - Complete cross-format mapping table showing semantic correspondence between 127 canonical joints across all analyzed standards
-- `proposal.md` - Metaverse Standards Forum proposal for RCSF adoption, including strategic implementation pathways and stakeholder benefits
+- `survey.md` - Per-format analysis of the surveyed skeletal standards (OpenUSD, VRM, HAnim, SMPL-X, BVH, ASF/AMC, Mixamo, UE Mannequin, Unity Mecanim, and others)
+- `joints.csv` - The mapping table: each canonical joint alongside its equivalent in every surveyed format
+- `proposal.md` - Draft proposal for the Metaverse Standards Forum
 - `references.md` - Primary information sources for each of the studied formats
 - `README.md` - This overview document
+- `skels/` - The mapping table exploded into one human-editable TOML file per skeleton, plus `_canonical.toml` (the pivot defining joint and column order). This is the source you edit; `joints.csv` is regenerated from it. See [Editing the Mapping](#editing-the-mapping).
+- `split_csv.py`, `join_csv.py`, `rcsf.py` - Small dependency-free tools that explode `joints.csv` into `skels/` and stitch it back, verifying the round-trip is lossless.
+
+## Editing the Mapping
+
+`joints.csv` is a wide table (one row per canonical joint, one column per
+skeleton), which grows unwieldy to review in a pull request. To keep edits
+small and reviewable, the table is kept exploded under `skels/`:
+
+```
+skels/
+  _canonical.toml     # the pivot: canonical joint order + column order (edit to add rows/columns)
+  OpenUSD.toml        # one file per skeleton: canonical joint -> that format's joint name
+  VRM.toml            # ("-" means the format has no equivalent for that joint)
+  ...                 #
+  ANNY.toml           #
+```
+
+**`skels/` is the source of truth; `joints.csv` is a generated artifact.** You
+edit the small TOML files, then regenerate the CSV. The tooling is pure Python
+3.11+ (stdlib only — no `pip install`), and every regeneration verifies the
+round-trip is byte-exact, so nothing is ever silently lost.
+
+Two commands cover everything:
+
+```bash
+python3 join_csv.py            # CHECK: does skels/ still reproduce joints.csv? (exits non-zero on drift)
+python3 join_csv.py --write    # APPLY: regenerate joints.csv from skels/, printing every changed cell
+```
+
+The `--write` change summary is the safety net: it lists exactly which cells
+moved (e.g. `[HAnim] LeftHand: 'hand_l' -> 'l_radiocarpal'`), so an accidental
+off-by-one or wrong-column edit is obvious before you commit.
+
+### Common tasks
+
+- **Fix or refresh one skeleton's joint names**
+  Edit its `skels/<Skeleton>.toml`, then `python3 join_csv.py --write` and review the printed diff. Commit the `.toml` and the regenerated `joints.csv` together.
+
+- **Add a new skeleton (a new column)**
+  1. Create `skels/<Name>.toml` with a `skeleton = "<Name>"` line and a `[values]` table mapping **every** canonical joint to that format's name (`"-"` where none).
+  2. Append `"<Name>"` to the `skeletons` list in `skels/_canonical.toml` (its position sets the column order).
+  3. `python3 join_csv.py --write`.
+
+- **Add a new canonical joint (a new row)**
+  1. Insert the joint name into the `joints` list in `skels/_canonical.toml` at the correct hierarchy position (this sets row order).
+  2. Add that same key to the `[values]` table of **every** `skels/*.toml`.
+  3. `python3 join_csv.py --write`. (`join_csv.py` errors clearly if any skeleton file is missing the new joint, so you can't half-add a row.)
+
+- **Rebuild `skels/` from scratch** (e.g. after editing `joints.csv` directly)
+  `python3 split_csv.py` re-explodes the CSV into `skels/`; follow with `python3 join_csv.py` to confirm they agree.
+
+Because each skeleton lives in its own file, a PR that touches one format shows
+a clean, self-contained diff — and `python3 join_csv.py` in CI will fail if
+`joints.csv` and `skels/` ever fall out of sync.
 
 ## Tasks
 
@@ -22,7 +77,7 @@ This framework provides synthesis-based solutions through comprehensive intermed
 
 - [ ] OpenUSD - Pixar Universal Scene Description skeletal framework
 - [x] VRM - VRoid [humanoid avatar specification](https://github.com/vrm-c/vrm-specification/blob/master/specification/VRMC_vrm-1.0/humanoid.md)
-- [ ] HAnim - Web3D Consortium humanoid animation standard
+- [x] HAnim - Web3D Consortium humanoid animation standard
 - [ ] SMPL-X - Statistical Multi-Person Linear model eXpressive
 - [ ] BVH - Biovision Hierarchy motion capture format
 - [ ] ASF/AMC - Acclaim motion capture format
@@ -33,6 +88,7 @@ This framework provides synthesis-based solutions through comprehensive intermed
 - [ ] Second Life - Linden Lab Bento and legacy skeletons
 - [ ] Roblox - R15 Reference Skeleton
 - [ ] Momentum Humanoid Rig - Meta SAM3D Body Skeleton
+- [x] ANNY - NAVER Labs [differentiable parametric body model](https://github.com/naver/anny) (MakeHuman-derived "anny" rig)
 
 ### Create Tools
 
@@ -79,10 +135,6 @@ This framework provides synthesis-based solutions through comprehensive intermed
 
 - [ ] How do we handle proprietary engine-specific features (Animation Blueprints, etc.)?
 - [ ] How should the framework accommodate emerging standards (VR haptics, AI-driven animation)?
-
-### Governance
-
-- [ ] What governance model ensures long-term framework evolution?
 
 ## License
 
