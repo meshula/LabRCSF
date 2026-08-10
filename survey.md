@@ -1264,12 +1264,20 @@ Root (Pelvis)
 │  │  │  │   └─ UpperArm_L
 │  │  │  │       └─ LowerArm_L
 │  │  │  │           └─ Hand_L
-│  │  │  │               └─ Fingers (optional / twist bones exist)
+│  │  │  │               ├─ thumb_01_l → thumb_02_l → thumb_03_l
+│  │  │  │               ├─ index_metacarpal_l → index_01_l → index_02_l → index_03_l
+│  │  │  │               ├─ middle_metacarpal_l → middle_01_l → middle_02_l → middle_03_l
+│  │  │  │               ├─ ring_metacarpal_l → ring_01_l → ring_02_l → ring_03_l
+│  │  │  │               └─ pinky_metacarpal_l → pinky_01_l → pinky_02_l → pinky_03_l
 │  │  │  └─ Clavicle_R
 │  │  │       └─ UpperArm_R
 │  │  │           └─ LowerArm_R
 │  │  │               └─ Hand_R
-│  │  │                   └─ Fingers (optional / twist bones)
+│  │  │                   ├─ thumb_01_r → thumb_02_r → thumb_03_r
+│  │  │                   ├─ index_metacarpal_r → index_01_r → index_02_r → index_03_r
+│  │  │                   ├─ middle_metacarpal_r → middle_01_r → middle_02_r → middle_03_r
+│  │  │                   ├─ ring_metacarpal_r → ring_01_r → ring_02_r → ring_03_r
+│  │  │                   └─ pinky_metacarpal_r → pinky_01_r → pinky_02_r → pinky_03_r
 ├─ Thigh_L
 │   └─ Calf_L
 │       └─ Foot_L
@@ -1289,7 +1297,8 @@ Root (Pelvis)
 **Distinctive Characteristics**:
 
 - **Performance optimization**: Joint count and hierarchy designed for real-time deformation with predictable GPU skinning costs
-- **Twist bone integration**: Optional intermediate joints for enhanced deformation quality without base skeleton modification
+- **Twist bone integration**: Optional intermediate joints (`upperarm_twist_*`, `lowerarm_twist_*`, etc.) for enhanced deformation quality without base skeleton modification
+- **Full finger rig (UE5)**: Each of the four fingers has a metacarpal plus three phalanges (`index_metacarpal_l → index_01_l → index_02_l → index_03_l`); the thumb has three bones (`thumb_01_l → thumb_02_l → thumb_03_l`) and no separate metacarpal. There are no fingertip bones. Left/right bones use `_l`/`_r` suffixes.
 - **Animation Blueprint compatibility**: Joint naming and structure optimized for Unreal's visual scripting animation system
 - **Scalable complexity**: Modular approach enables complexity adjustment based on platform performance requirements
 
